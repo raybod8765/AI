@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>The AI that's smart.</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: system-ui, Arial;
+  background: radial-gradient(circle at top, #0d0d0d99, #090909f1);
+  color: white;
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+}
+
+/* SIDEBAR */
+#sidebar {
+  width: 210px;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(10px);
+  border-right: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  flex-direction: column;
+}
+
+/* HEADER */
+#sidebarHeader {
+  padding: 10px;
+  font-size: 1.4em;
+  font-weight: bold;
+  text-align: center;
+}
+
+#divider {
+  height: 1px;
+  background: rgba(255,255,255,0.15);
+  margin: 0 8px;
+}
+
+/* SEARCH */
+#search {
+  margin: 6px;
+  padding: 6px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: none;
+  outline: none;
+  background: rgba(255,255,255,0.08);
+  color: white;
+  min-height: 30px !important;
+  max-height: 30px !important;
+}
+
+/* CHAT LIST */
+#chats {
+  flex: 1;
+  overflow-y: auto;
+  
+}
+
+.chatItem {
+  padding: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.chatItem:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+.chatItem.active {
+  background: rgba(43,92,255,0.4);
+}
+
+.delBtn {
+  float: right;
+  color: red;
+  cursor: pointer;
+}
+
+/* ADD CHAT BUTTON */
+#addChatBtn {
+  margin: 8px;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  background: #2b5cff;
+  color: white;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+/* MAIN */
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* BANNER */
+#banner {
+  text-align: center;
+  padding: 10px;
+  font-size: 14px;
+  background: rgba(0,0,0,0.45);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+/* CHAT */
+#chat {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+/* BUBBLES */
+.msg {
+  display: block;
+  width: fit-content;
+  max-width: 65%;
+  padding: 10px 14px;
+  margin: 6px 0;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.user {
+  margin-left: auto;
+  background: #2b5cff;
+}
+
+.ai {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* BAR */
+#bar {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(0,0,0,0.4);
+  align-items: center;
+}
+
+input, select, button {
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  outline: none;
+  color: white;
+}
+
+input {
+  flex: 1;
+  background: rgba(255,255,255,0.08);
+  padding: 0 8px;
+}
+
+select {
+  background: rgba(255,255,255,0.08);
+}
+
+button {
+  background: #2b5cff;
+  cursor: pointer;
+}
+
+option{
+    color: black;
+}
+</style>
+</head>
+
+<body>
+
+<div id="sidebar">
+  <div id="sidebarHeader">Chats</div>
+  <div id="divider"></div>
+
+  <input id="search" placeholder="Search chats...">
+
+  <div id="chats"></div>
+
+  <button id="addChatBtn">+ Add Chat</button>
+</div>
+
+<div id="main">
+
+  <div id="banner">2026 - raybod8765's AI system</div>
+
+  <div id="chat"></div>
+
+  <div id="bar">
+    <select id="mode">
+      <option value="fast" selected>Fast (Gemma 1.0)</option>
+      <option value="pro">Pro (Llama 3.0)</option>
+    </select>
+
+    <input id="input" placeholder="Message AI...">
+    <button onclick="send()">Send</button>
+  </div>
+
+</div>
+
+<script>
+
+const WORKER_URL = "https://ai.raybod8765.workers.dev";
+
+/* FIX: define FIRST (this was your crash) */
+let chats = JSON.parse(localStorage.getItem("chats") || "[]");
+let currentChat = null;
+let searchQuery = "";
+
+/* ADD CHAT BUTTON */
+document.getElementById("addChatBtn").onclick = () => {
+  createChat();
+};
+
+/* SEARCH */
+document.getElementById("search").addEventListener("input", (e) => {
+  searchQuery = e.target.value.toLowerCase();
+  renderChats();
+});
+
+/* CREATE CHAT */
+function createChat() {
+  const id = Date.now().toString();
+
+  const chat = {
+    id,
+    title: "New Chat",
+    messages: []
+  };
+
+  chats.push(chat);
+  saveChats();
+  switchChat(id);
+  renderChats();
+}
+
+/* SAVE */
+function saveChats() {
+  localStorage.setItem("chats", JSON.stringify(chats));
+}
+
+/* FILTER */
+function filtered() {
+  return chats.filter(c =>
+    c.title.toLowerCase().includes(searchQuery)
+  );
+}
+
+/* RENDER SIDEBAR */
+function renderChats() {
+  const box = document.getElementById("chats");
+  box.innerHTML = "";
+
+  filtered().forEach(c => {
+    const div = document.createElement("div");
+    div.className = "chatItem" + (c.id === currentChat ? " active" : "");
+
+    div.innerHTML = `${c.title} <span class="delBtn">✖</span>`;
+
+    div.onclick = (e) => {
+      if (e.target.classList.contains("delBtn")) {
+        chats = chats.filter(x => x.id !== c.id);
+        saveChats();
+        renderChats();
+        return;
+      }
+      switchChat(c.id);
+    };
+
+    box.appendChild(div);
+  });
+}
+
+/* SWITCH CHAT */
+function switchChat(id) {
+  currentChat = id;
+  location.hash = id;
+
+  const chat = chats.find(c => c.id === id);
+  const box = document.getElementById("chat");
+
+  box.innerHTML = "";
+
+  chat.messages.forEach(m => {
+    const div = document.createElement("div");
+    div.className = "msg " + m.role;
+    div.textContent = m.text;
+    box.appendChild(div);
+  });
+
+  renderChats();
+}
+
+/* SEND */
+async function send() {
+
+  const input = document.getElementById("input");
+  const text = input.value.trim();
+  const mode = document.getElementById("mode").value;
+
+  if (!text) return;
+
+  input.value = "";
+
+  if (!currentChat) createChat();
+
+  const chat = chats.find(c => c.id === currentChat);
+
+  chat.messages.push({ role: "user", text });
+
+  const box = document.getElementById("chat");
+
+  const u = document.createElement("div");
+  u.className = "msg user";
+  u.textContent = text;
+  box.appendChild(u);
+
+  const ai = document.createElement("div");
+  ai.className = "msg ai";
+  ai.textContent = "•••";
+  box.appendChild(ai);
+
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, mode })
+    });
+
+    const data = await res.json();
+    const reply = data.reply || "No response";
+
+    ai.textContent = reply;
+
+    chat.messages.push({ role: "ai", text: reply });
+
+    if (chat.title === "New Chat") {
+      chat.title = reply.slice(0, 20);
+    }
+
+    saveChats();
+    renderChats();
+
+  } catch (err) {
+    ai.textContent = "Error: " + err.message;
+  }
+}
+
+/* ENTER */
+document.getElementById("input").addEventListener("keydown", e => {
+  if (e.key === "Enter") send();
+});
+
+/* INIT */
+function init() {
+  const id = location.hash.replace("#", "");
+
+  if (id && chats.find(c => c.id === id)) {
+    switchChat(id);
+  } else if (chats.length) {
+    switchChat(chats[0].id);
+  } else {
+    createChat();
+  }
+
+  renderChats();
+}
+
+init();
+
+</script>
+
+</body>
+</html>
