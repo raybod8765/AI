@@ -32,17 +32,6 @@ body {
   text-align: center;
 }
 
-#search {
-  margin: 6px;
-  padding: 6px;
-  font-size: 12px;
-  border-radius: 6px;
-  border: none;
-  background: rgba(255,255,255,0.08);
-  color: white;
-  max-height: 30px !important;
-}
-
 #chats {
   flex: 1;
   overflow-y: auto;
@@ -61,8 +50,6 @@ body {
   background: rgba(43,92,255,0.4);
 }
 
-.delBtn { color: red; cursor: pointer; }
-
 #addChatBtn {
   margin: 8px;
   padding: 10px;
@@ -73,13 +60,10 @@ body {
   cursor: pointer;
 }
 
-#main { flex: 1; display: flex; flex-direction: column; }
-
-#banner {
-  text-align: center;
-  padding: 10px;
-  font-size: 14px;
-  background: rgba(0,0,0,0.45);
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 #chat {
@@ -101,46 +85,47 @@ body {
 .user { margin-left: auto; background: #2b5cff; }
 .ai { background: rgba(255,255,255,0.08); }
 
+.fileBox {
+  margin-top: 6px;
+  padding: 6px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+}
+
+img.preview {
+  max-width: 200px;
+  border-radius: 10px;
+}
+
 #bar {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   padding: 8px;
   background: rgba(0,0,0,0.4);
 }
 
 input, select, button {
-  height: 30px !important;
+  height: 30px;
   border-radius: 8px;
   border: none;
   color: white;
 }
 
-input { flex: 1; background: rgba(255,255,255,0.08); padding: 0 8px; }
-select { background: rgba(255,255,255,0.08); }
-button { background: #2b5cff; cursor: pointer; }
-
-option { color:#000; }
-
-a{
-  color:#7aa2ff;
+input {
+  flex: 1;
+  background: rgba(255,255,255,0.08);
+  padding: 0 8px;
 }
 
-pre{
-  background:#00000055;
-  padding:10px;
-  border-radius:10px;
-  overflow:auto;
+button {
+  background: #2b5cff;
+  cursor: pointer;
 }
 
-code{
-  background:#00000055;
-  padding:2px 5px;
-  border-radius:5px;
-}
-
-h1,h2,h3,h4,h5,h6{
-  margin:8px 0;
-}
+a { color:#7aa2ff; }
+pre { background:#00000055; padding:10px; border-radius:10px; }
+code { background:#00000055; padding:2px 5px; border-radius:5px; }
+#mode { background: #232323; color: white; border-radius: 8px; }
 </style>
 </head>
 
@@ -148,23 +133,27 @@ h1,h2,h3,h4,h5,h6{
 
 <div id="sidebar">
   <div id="sidebarHeader">Chats</div>
+  <div style="border: 1px solid #c8c8c8;"></div>
   <div id="chats"></div>
   <button id="addChatBtn">+ New Chat</button>
 </div>
 
 <div id="main">
-  <div id="banner">AI Chat</div>
   <div id="chat"></div>
 
   <div id="bar">
     <select id="mode">
-      <option value="lite">Lite (Gemma 1)</option>
-      <option value="fast">Fast (Gemma 2)</option>
-      <option value="pro">Pro (Gemma 3)</option>  
-      <option value="ultra" selected>Ultra (Llama 3.1)</option>    
+      <option value="lite">Lite</option>
+      <option value="fast">Fast</option>
+      <option value="pro">Pro</option>
+      <option value="ultra">Ultra</option>
     </select>
 
     <input id="input" placeholder="Ask me anything...">
+
+    <input type="file" id="fileInput" accept="image/*" multiple hidden>
+    <button id="fileBtn">📎</button>
+    <button id="micBtn">🎤</button>
     <button id="sendBtn">Send</button>
   </div>
 </div>
@@ -175,58 +164,36 @@ const WORKER_URL = "https://ai.raybod8765.workers.dev";
 
 let chats = JSON.parse(localStorage.getItem("chats") || "[]");
 let currentChat = null;
+let attachments = [];
 
-/* ---------- STORAGE HELPERS ---------- */
+/* SAVE */
 function save() {
   localStorage.setItem("chats", JSON.stringify(chats));
-  localStorage.setItem("lastChatId", currentChat);
 }
 
-/* ---------- HASH SYNC ---------- */
-function setHash(id) {
-  location.hash = id;
-}
-
-/* ---------- INIT ---------- */
-function init() {
-
-  const hashId = location.hash.replace("#", "");
-  const lastId = localStorage.getItem("lastChatId");
-
-  // priority: hash → last session → new chat
-  let target = chats.find(c => c.id === hashId)
-            || chats.find(c => c.id === lastId);
-
-  if (!target) {
-    target = createChat();
-  }
-
-  switchChat(target.id);
-}
-
-/* ---------- CHAT ---------- */
+/* CHAT */
 function createChat() {
   const id = Date.now().toString();
   const chat = { id, title: "New Chat", messages: [] };
   chats.push(chat);
   save();
-  render();
   return chat;
 }
 
 function switchChat(id) {
   currentChat = id;
-  setHash(id);
-  save();
-
   const chat = chats.find(c => c.id === id);
+
   const box = document.getElementById("chat");
   box.innerHTML = "";
 
   chat.messages.forEach(m => {
     const div = document.createElement("div");
     div.className = "msg " + m.role;
-    div.innerHTML = md(m.text);
+    div.innerHTML = md(m.text || "");
+
+    if (m.files) div.appendChild(renderFiles(m.files));
+
     box.appendChild(div);
   });
 
@@ -234,163 +201,121 @@ function switchChat(id) {
   scrollBottom();
 }
 
-/* ---------- RENDER ---------- */
-function render() {
-  const box = document.getElementById("chats");
-  box.innerHTML = "";
+/* FILES */
+document.getElementById("fileBtn").onclick = () =>
+  document.getElementById("fileInput").click();
 
-  chats.forEach(c => {
-    const div = document.createElement("div");
-    div.className = "chatItem" + (c.id === currentChat ? " active" : "");
+document.getElementById("fileInput").onchange = async (e) => {
+  const files = [...e.target.files];
 
-    div.innerHTML = `
-      <span>${c.title}</span>
-      <span class="delBtn">✖</span>
-    `;
+  attachments = await Promise.all(files.map(file =>
+    new Promise(res => {
+      const r = new FileReader();
+      r.onload = () => res({
+        name: file.name,
+        type: file.type,
+        data: r.result
+      });
+      r.readAsDataURL(file);
+    })
+  ));
+};
 
-    div.onclick = (e) => {
-      if (e.target.classList.contains("delBtn")) {
-        chats = chats.filter(x => x.id !== c.id);
-        save();
-        render();
-        return;
-      }
-      switchChat(c.id);
-    };
+function renderFiles(files) {
+  const wrap = document.createElement("div");
+  wrap.className = "fileBox";
 
-    box.appendChild(div);
+  files.forEach(f => {
+    if (f.type.startsWith("image/")) {
+      const img = document.createElement("img");
+      img.src = f.data;
+      img.className = "preview";
+      wrap.appendChild(img);
+    } else {
+      const d = document.createElement("div");
+      d.textContent = f.name;
+      wrap.appendChild(d);
+    }
   });
+
+  return wrap;
 }
 
-/* ---------- SCROLL ---------- */
-function scrollBottom() {
-  const c = document.getElementById("chat");
-  c.scrollTop = c.scrollHeight;
+/* VOICE 🎤 */
+const micBtn = document.getElementById("micBtn");
+
+if ("webkitSpeechRecognition" in window) {
+  const rec = new webkitSpeechRecognition();
+  rec.continuous = false;
+  rec.lang = "en-US";
+
+  micBtn.onclick = () => rec.start();
+
+  rec.onresult = (e) => {
+    document.getElementById("input").value =
+      e.results[0][0].transcript;
+  };
 }
 
-/* ---------- MARKDOWN ---------- */
-/* ---------- MARKDOWN ---------- */
+/* MARKDOWN */
 function md(text) {
-
-  text = String(text);
-
-  // escape html
-  text = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-
-  /* CODE BLOCKS */
-  text = text.replace(
-    /```([\s\S]*?)```/g,
-    '<pre><code>$1</code></pre>'
-  );
-
-  /* INLINE CODE */
-  text = text.replace(
-    /`([^`]+)`/g,
-    '<code>$1</code>'
-  );
-
-  /* HEADINGS */
-  text = text.replace(/^###### (.*)$/gm, '<h6>$1</h6>');
-  text = text.replace(/^##### (.*)$/gm, '<h5>$1</h5>');
-  text = text.replace(/^#### (.*)$/gm, '<h4>$1</h4>');
-  text = text.replace(/^### (.*)$/gm, '<h3>$1</h3>');
-  text = text.replace(/^## (.*)$/gm, '<h2>$1</h2>');
-  text = text.replace(/^# (.*)$/gm, '<h1>$1</h1>');
-
-  /* LINKS */
-  text = text.replace(
-    /\[([^\]]+)\]\(([^)]+)\)/g,
-    '<a href="$2" target="_blank">$1</a>'
-  );
-
-  /* BOLD ITALIC */
-  text = text.replace(
-    /\*\*\*(.*?)\*\*\*/g,
-    '<b><i>$1</i></b>'
-  );
-
-  /* BOLD */
-  text = text.replace(
-    /\*\*(.*?)\*\*/g,
-    '<b>$1</b>'
-  );
-
-  /* ITALIC WITH * */
-  text = text.replace(
-    /\*(.*?)\*/g,
-    '<i>$1</i>'
-  );
-
-  /* ITALIC WITH _ */
-  text = text.replace(
-    /_(.*?)_/g,
-    '<i>$1</i>'
-  );
-
-  /* LINE BREAKS */
-  text = text.replace(/\n/g, "<br>");
-
-  return text;
+  return String(text)
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/```([\s\S]*?)```/g,'<pre><code>$1</code></pre>')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank">$1</a>')
+    .replace(/^###### (.*)$/gm,'<h6>$1</h6>')
+    .replace(/^##### (.*)$/gm,'<h5>$1</h5>')
+    .replace(/^#### (.*)$/gm,'<h4>$1</h4>')
+    .replace(/^### (.*)$/gm,'<h3>$1</h3>')
+    .replace(/^## (.*)$/gm,'<h2>$1</h2>')
+    .replace(/^# (.*)$/gm,'<h1>$1</h1>')
+    .replace(/\n/g,'<br>');
 }
 
-/* ---------- TYPE MARKDOWN ---------- */
-function typeMarkdown(el, text, speed = 8) {
-
-  let i = 0;
-  let current = "";
+/* TYPE */
+function typeMarkdown(el, text) {
+  let i = 0, buf = "";
 
   function step() {
-
     if (i < text.length) {
-
-      current += text[i];
-
-      // render markdown WHILE typing
-      el.innerHTML = md(current);
-
+      buf += text[i];
+      el.innerHTML = md(buf);
       scrollBottom();
-
       i++;
-
-      setTimeout(step, speed);
-
+      setTimeout(step, 6);
     } else {
-
-      // final clean render
       el.innerHTML = md(text);
-
-      scrollBottom();
-
     }
-
   }
 
   step();
 }
 
-/* ---------- SEND ---------- */
+/* SEND */
 async function send() {
+
   const input = document.getElementById("input");
   const text = input.value.trim();
   const mode = document.getElementById("mode").value;
 
-  if (!text) return;
+  if (!text && attachments.length === 0) return;
   input.value = "";
 
   if (!currentChat) createChat();
 
   const chat = chats.find(c => c.id === currentChat);
 
-  chat.messages.push({ role: "user", text });
+  chat.messages.push({ role:"user", text, files: attachments });
 
   const box = document.getElementById("chat");
 
   const u = document.createElement("div");
   u.className = "msg user";
   u.innerHTML = md(text);
+  if (attachments.length) u.appendChild(renderFiles(attachments));
   box.appendChild(u);
 
   const ai = document.createElement("div");
@@ -400,50 +325,65 @@ async function send() {
 
   scrollBottom();
 
+  const payload = {
+    message: text,
+    mode,
+    files: attachments
+  };
+
+  attachments = [];
+
   const res = await fetch(WORKER_URL, {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({
-      message: text,
-      mode,
-      memory: chat.messages.slice(-20)
-    })
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(payload)
   });
 
   const data = await res.json();
-  const reply = data.reply || "No response";
+
+  const reply = data.reply || "";
 
   typeMarkdown(ai, reply);
-  chat.messages.push({ role: "ai", text: reply });
 
-  // FIX TITLE (NO "SURE..." garbage)
-  if (chat.title === "New Chat") {
-    let title = text.split(" ").slice(0, 4).join(" ");
-    chat.title = title.replace(/[^a-zA-Z0-9 ]/g, "").trim();
-  }
+  chat.messages.push({ role:"ai", text: reply });
 
   save();
   render();
-  scrollBottom();
 }
 
-/* ---------- EVENTS ---------- */
+/* UI */
+function render() {
+  const box = document.getElementById("chats");
+  box.innerHTML = "";
+
+  chats.forEach(c => {
+    const div = document.createElement("div");
+    div.className = "chatItem" + (c.id===currentChat?" active":"");
+    div.innerHTML = `<span>${c.title}</span>`;
+    div.onclick = () => switchChat(c.id);
+    box.appendChild(div);
+  });
+}
+
+function scrollBottom() {
+  const c = document.getElementById("chat");
+  c.scrollTop = c.scrollHeight;
+}
+
+/* EVENTS */
 document.getElementById("sendBtn").onclick = send;
-document.getElementById("input").addEventListener("keydown", e => {
+document.getElementById("input").onkeydown = e => {
   if (e.key === "Enter") send();
-});
+};
 
 document.getElementById("addChatBtn").onclick = () => {
   const c = createChat();
   switchChat(c.id);
 };
 
-window.addEventListener("hashchange", () => {
-  const id = location.hash.replace("#", "");
-  if (id) switchChat(id);
-});
-
-init();
+/* INIT */
+if (chats.length) switchChat(chats[0].id);
+else switchChat(createChat().id);
 
 </script>
 
