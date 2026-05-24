@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>The AI that's smart.</title>
+<title>AI Chat</title>
 
 <style>
 body {
@@ -26,39 +26,27 @@ body {
   flex-direction: column;
 }
 
-/* HEADER */
 #sidebarHeader {
   padding: 10px;
-  font-size: 1.4em;
+  font-size: 1.2em;
   font-weight: bold;
   text-align: center;
 }
 
-#divider {
-  height: 1px;
-  background: rgba(255,255,255,0.15);
-  margin: 0 8px;
-}
-
-/* SEARCH */
 #search {
   margin: 6px;
   padding: 6px;
   font-size: 12px;
   border-radius: 6px;
   border: none;
-  outline: none;
   background: rgba(255,255,255,0.08);
   color: white;
-  min-height: 30px !important;
   max-height: 30px !important;
 }
 
-/* CHAT LIST */
 #chats {
   flex: 1;
   overflow-y: auto;
-  
 }
 
 .chatItem {
@@ -66,10 +54,9 @@ body {
   cursor: pointer;
   font-size: 12px;
   border-bottom: 1px solid rgba(255,255,255,0.05);
-}
-
-.chatItem:hover {
-  background: rgba(255,255,255,0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .chatItem.active {
@@ -77,12 +64,11 @@ body {
 }
 
 .delBtn {
-  float: right;
   color: red;
   cursor: pointer;
 }
 
-/* ADD CHAT BUTTON */
+/* ADD BUTTON */
 #addChatBtn {
   margin: 8px;
   padding: 10px;
@@ -91,7 +77,6 @@ body {
   background: #2b5cff;
   color: white;
   cursor: pointer;
-  font-weight: bold;
 }
 
 /* MAIN */
@@ -101,13 +86,11 @@ body {
   flex-direction: column;
 }
 
-/* BANNER */
 #banner {
   text-align: center;
   padding: 10px;
   font-size: 14px;
   background: rgba(0,0,0,0.45);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
 /* CHAT */
@@ -117,28 +100,20 @@ body {
   padding: 12px;
 }
 
-/* BUBBLES */
+/* MSG */
 .msg {
   display: block;
   width: fit-content;
-  max-width: 65%;
+  max-width: 70%;
   padding: 10px 14px;
   margin: 6px 0;
   border-radius: 12px;
-  font-size: 14px;
   line-height: 1.4;
-  word-break: break-word;
+  white-space: pre-wrap;
 }
 
-.user {
-  margin-left: auto;
-  background: #2b5cff;
-}
-
-.ai {
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.1);
-}
+.user { margin-left: auto; background: #2b5cff; }
+.ai { background: rgba(255,255,255,0.08); }
 
 /* BAR */
 #bar {
@@ -150,10 +125,9 @@ body {
 }
 
 input, select, button {
-  height: 36px;
+  height: 30px !important;
   border-radius: 8px;
   border: none;
-  outline: none;
   color: white;
 }
 
@@ -172,8 +146,28 @@ button {
   cursor: pointer;
 }
 
-option{
-    color: black;
+option { color: #000; }
+
+/* DELETE POPUP */
+#modal {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+#modalBox {
+  background: #111;
+  padding: 20px;
+  border-radius: 12px;
+  text-align: center;
+}
+
+#modalBox button {
+  margin: 5px;
 }
 </style>
 </head>
@@ -182,97 +176,94 @@ option{
 
 <div id="sidebar">
   <div id="sidebarHeader">Chats</div>
-  <div id="divider"></div>
-
   <input id="search" placeholder="Search chats...">
-
   <div id="chats"></div>
-
-  <button id="addChatBtn">+ Add Chat</button>
+  <button id="addChatBtn">+ New Chat</button>
 </div>
 
 <div id="main">
-
-  <div id="banner">2026 - raybod8765's AI system</div>
-
+  <div id="banner">AI Chat</div>
   <div id="chat"></div>
 
   <div id="bar">
     <select id="mode">
-      <option value="fast" selected>Fast (Gemma 1.0)</option>
-      <option value="pro">Pro (Llama 3.0)</option>
+      <option value="fast">Fast</option>
+      <option value="pro" selected>Pro</option>
     </select>
 
-    <input id="input" placeholder="Message AI...">
-    <button onclick="send()">Send</button>
+    <input id="input" placeholder="Ask me anything...">
+    <button id="sendBtn">Send</button>
   </div>
+</div>
 
+<!-- DELETE MODAL -->
+<div id="modal">
+  <div id="modalBox">
+    <p>Delete this chat?</p>
+    <button id="cancelDel">Cancel</button>
+    <button id="confirmDel">Delete</button>
+  </div>
 </div>
 
 <script>
 
 const WORKER_URL = "https://ai.raybod8765.workers.dev";
 
-/* FIX: define FIRST (this was your crash) */
 let chats = JSON.parse(localStorage.getItem("chats") || "[]");
 let currentChat = null;
-let searchQuery = "";
-
-/* ADD CHAT BUTTON */
-document.getElementById("addChatBtn").onclick = () => {
-  createChat();
-};
-
-/* SEARCH */
-document.getElementById("search").addEventListener("input", (e) => {
-  searchQuery = e.target.value.toLowerCase();
-  renderChats();
-});
-
-/* CREATE CHAT */
-function createChat() {
-  const id = Date.now().toString();
-
-  const chat = {
-    id,
-    title: "New Chat",
-    messages: []
-  };
-
-  chats.push(chat);
-  saveChats();
-  switchChat(id);
-  renderChats();
-}
+let deleteTarget = null;
 
 /* SAVE */
-function saveChats() {
+function save() {
   localStorage.setItem("chats", JSON.stringify(chats));
 }
 
-/* FILTER */
-function filtered() {
-  return chats.filter(c =>
-    c.title.toLowerCase().includes(searchQuery)
-  );
+function scrollToBottom() {
+  const box = document.getElementById("chat");
+  box.scrollTop = box.scrollHeight;
+}
+
+/* MARKDOWN */
+function md(t) {
+  return String(t)
+    .replace(/```([\s\S]*?)```/g, "<pre><code>$1</code></pre>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>")
+    .replace(/\n/g, "<br>");
+}
+
+/* MEMORY */
+function memory(chat) {
+  return chat.messages.slice(-25);
+}
+
+/* CREATE CHAT */
+function createChat(title = "New Chat") {
+  const id = Date.now().toString();
+  chats.push({ id, title, messages: [] });
+  save();
+  switchChat(id);
+  render();
 }
 
 /* RENDER SIDEBAR */
-function renderChats() {
+function render() {
   const box = document.getElementById("chats");
   box.innerHTML = "";
 
-  filtered().forEach(c => {
+  chats.forEach(c => {
     const div = document.createElement("div");
     div.className = "chatItem" + (c.id === currentChat ? " active" : "");
 
-    div.innerHTML = `${c.title} <span class="delBtn">✖</span>`;
+    div.innerHTML = `
+      <span>${c.title}</span>
+      <span class="delBtn" data-id="${c.id}">✖</span>
+    `;
 
     div.onclick = (e) => {
       if (e.target.classList.contains("delBtn")) {
-        chats = chats.filter(x => x.id !== c.id);
-        saveChats();
-        renderChats();
+        deleteTarget = c.id;
+        document.getElementById("modal").style.display = "flex";
         return;
       }
       switchChat(c.id);
@@ -282,24 +273,69 @@ function renderChats() {
   });
 }
 
-/* SWITCH CHAT */
+/* SWITCH */
 function switchChat(id) {
   currentChat = id;
-  location.hash = id;
-
   const chat = chats.find(c => c.id === id);
-  const box = document.getElementById("chat");
 
+  const box = document.getElementById("chat");
   box.innerHTML = "";
 
   chat.messages.forEach(m => {
     const div = document.createElement("div");
     div.className = "msg " + m.role;
-    div.textContent = m.text;
+    div.innerHTML = md(m.text);
     box.appendChild(div);
   });
 
-  renderChats();
+  render();
+scrollToBottom();
+}
+
+/* TYPE EFFECT */
+function type(el, text, speed = 20) {
+  el.innerHTML = "";
+
+  let i = 0;
+  let buffer = "";
+
+function step() {
+  if (i < text.length) {
+    buffer += text[i];
+
+    el.innerHTML = md(buffer);
+
+    scrollToBottom(); // ⭐ keep chat pinned to bottom
+
+    i++;
+    setTimeout(step, speed);
+  }
+}
+
+  step();
+}
+
+/* AI TITLE */
+async function generateTitle(text, reply, mode) {
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        message: `Make a short chat title (max 5 words):\nUser: ${text}\nAI: ${reply}`,
+        mode
+      })
+    });
+
+    const data = await res.json();
+    return (data.reply || "Chat")
+      .replace(/[#*`\n"]/g,"")
+      .trim()
+      .slice(0, 30);
+
+  } catch {
+    return "Chat";
+  }
 }
 
 /* SEND */
@@ -310,7 +346,6 @@ async function send() {
   const mode = document.getElementById("mode").value;
 
   if (!text) return;
-
   input.value = "";
 
   if (!currentChat) createChat();
@@ -323,61 +358,79 @@ async function send() {
 
   const u = document.createElement("div");
   u.className = "msg user";
-  u.textContent = text;
+  u.innerHTML = md(text);
   box.appendChild(u);
+scrollToBottom();
 
   const ai = document.createElement("div");
   ai.className = "msg ai";
-  ai.textContent = "•••";
+  ai.innerText = "•••";
   box.appendChild(ai);
+scrollToBottom();
 
   try {
     const res = await fetch(WORKER_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text, mode })
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({
+        message: text,
+        mode,
+        memory: memory(chat)
+      })
     });
 
     const data = await res.json();
     const reply = data.reply || "No response";
 
-    ai.textContent = reply;
-
     chat.messages.push({ role: "ai", text: reply });
 
+    type(ai, reply);
+
+    /* AUTO TITLE */
     if (chat.title === "New Chat") {
-      chat.title = reply.slice(0, 20);
+      chat.title = await generateTitle(text, reply, mode);
     }
 
-    saveChats();
-    renderChats();
+    save();
+    render();
 
-  } catch (err) {
-    ai.textContent = "Error: " + err.message;
+  } catch (e) {
+    ai.innerText = "Error: " + e.message;
   }
 }
 
-/* ENTER */
+/* DELETE */
+document.getElementById("confirmDel").onclick = () => {
+  chats = chats.filter(c => c.id !== deleteTarget);
+  deleteTarget = null;
+  document.getElementById("modal").style.display = "none";
+  save();
+  render();
+};
+
+document.getElementById("cancelDel").onclick = () => {
+  deleteTarget = null;
+  document.getElementById("modal").style.display = "none";
+};
+
+/* EVENTS */
+document.getElementById("sendBtn").onclick = send;
 document.getElementById("input").addEventListener("keydown", e => {
   if (e.key === "Enter") send();
 });
 
-/* INIT */
-function init() {
-  const id = location.hash.replace("#", "");
+document.getElementById("addChatBtn").onclick = () => createChat();
 
-  if (id && chats.find(c => c.id === id)) {
-    switchChat(id);
-  } else if (chats.length) {
-    switchChat(chats[0].id);
-  } else {
-    createChat();
-  }
-
-  renderChats();
+if (chats.length) {
+  switchChat(chats[0].id);
+  scrollToBottom();
 }
+else createChat();
 
-init();
+render();
+window.addEventListener("load", () => {
+  setTimeout(scrollToBottom, 50);
+});
 
 </script>
 
