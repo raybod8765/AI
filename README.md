@@ -1,2 +1,2 @@
 # AI
-AI based on Gemma 1 and Llama 3.
+AI based on Gemma 1, 2, and 3.
