@@ -120,6 +120,27 @@ select { background: rgba(255,255,255,0.08); }
 button { background: #2b5cff; cursor: pointer; }
 
 option { color:#000; }
+
+a{
+  color:#7aa2ff;
+}
+
+pre{
+  background:#00000055;
+  padding:10px;
+  border-radius:10px;
+  overflow:auto;
+}
+
+code{
+  background:#00000055;
+  padding:2px 5px;
+  border-radius:5px;
+}
+
+h1,h2,h3,h4,h5,h6{
+  margin:8px 0;
+}
 </style>
 </head>
 
@@ -137,8 +158,9 @@ option { color:#000; }
 
   <div id="bar">
     <select id="mode">
-      <option value="fast">Fast</option>
-      <option value="pro" selected>Pro</option>
+      <option value="lite">Lite (Gemma 1)</option>
+      <option value="fast">Fast (Gemma 2)</option>
+      <option value="pro" selected>Pro (Gemma 3)</option>
     </select>
 
     <input id="input" placeholder="Ask me anything...">
@@ -203,7 +225,7 @@ function switchChat(id) {
   chat.messages.forEach(m => {
     const div = document.createElement("div");
     div.className = "msg " + m.role;
-    div.innerHTML = m.text;
+    div.innerHTML = md(m.text);
     box.appendChild(div);
   });
 
@@ -245,6 +267,109 @@ function scrollBottom() {
   c.scrollTop = c.scrollHeight;
 }
 
+/* ---------- MARKDOWN ---------- */
+/* ---------- MARKDOWN ---------- */
+function md(text) {
+
+  text = String(text);
+
+  // escape html
+  text = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  /* CODE BLOCKS */
+  text = text.replace(
+    /```([\s\S]*?)```/g,
+    '<pre><code>$1</code></pre>'
+  );
+
+  /* INLINE CODE */
+  text = text.replace(
+    /`([^`]+)`/g,
+    '<code>$1</code>'
+  );
+
+  /* HEADINGS */
+  text = text.replace(/^###### (.*)$/gm, '<h6>$1</h6>');
+  text = text.replace(/^##### (.*)$/gm, '<h5>$1</h5>');
+  text = text.replace(/^#### (.*)$/gm, '<h4>$1</h4>');
+  text = text.replace(/^### (.*)$/gm, '<h3>$1</h3>');
+  text = text.replace(/^## (.*)$/gm, '<h2>$1</h2>');
+  text = text.replace(/^# (.*)$/gm, '<h1>$1</h1>');
+
+  /* LINKS */
+  text = text.replace(
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    '<a href="$2" target="_blank">$1</a>'
+  );
+
+  /* BOLD ITALIC */
+  text = text.replace(
+    /\*\*\*(.*?)\*\*\*/g,
+    '<b><i>$1</i></b>'
+  );
+
+  /* BOLD */
+  text = text.replace(
+    /\*\*(.*?)\*\*/g,
+    '<b>$1</b>'
+  );
+
+  /* ITALIC WITH * */
+  text = text.replace(
+    /\*(.*?)\*/g,
+    '<i>$1</i>'
+  );
+
+  /* ITALIC WITH _ */
+  text = text.replace(
+    /_(.*?)_/g,
+    '<i>$1</i>'
+  );
+
+  /* LINE BREAKS */
+  text = text.replace(/\n/g, "<br>");
+
+  return text;
+}
+
+/* ---------- TYPE MARKDOWN ---------- */
+function typeMarkdown(el, text, speed = 8) {
+
+  let i = 0;
+  let current = "";
+
+  function step() {
+
+    if (i < text.length) {
+
+      current += text[i];
+
+      // render markdown WHILE typing
+      el.innerHTML = md(current);
+
+      scrollBottom();
+
+      i++;
+
+      setTimeout(step, speed);
+
+    } else {
+
+      // final clean render
+      el.innerHTML = md(text);
+
+      scrollBottom();
+
+    }
+
+  }
+
+  step();
+}
+
 /* ---------- SEND ---------- */
 async function send() {
   const input = document.getElementById("input");
@@ -264,7 +389,7 @@ async function send() {
 
   const u = document.createElement("div");
   u.className = "msg user";
-  u.innerHTML = text;
+  u.innerHTML = md(text);
   box.appendChild(u);
 
   const ai = document.createElement("div");
@@ -287,7 +412,7 @@ async function send() {
   const data = await res.json();
   const reply = data.reply || "No response";
 
-  ai.innerHTML = reply;
+  typeMarkdown(ai, reply);
   chat.messages.push({ role: "ai", text: reply });
 
   // FIX TITLE (NO "SURE..." garbage)
